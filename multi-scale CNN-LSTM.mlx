@@ -1,0 +1,97 @@
+inputSize = [48 730 1];
+filterSize1 = [1 16];
+filterSize2=[1 32];
+filterSize3=[1 64];
+numFilters1 = 20; %50
+numFilters2 = 20; %50
+numHiddenUnits1 = 200;
+numHiddenUnits2 = 200;
+numHiddenUnits3 = 200;
+numClasses = 2;
+miniBatchSize =36;
+maxEpochs = 200;
+    layers1 = [
+    sequenceInputLayer(inputSize,'Name','input')
+    sequenceFoldingLayer('Name','fold')  
+    convolution2dLayer(filterSize1,numFilters2,'Padding','same','Stride',2,'Name','conv_2')
+    batchNormalizationLayer('Name','BN_2')
+    tanhLayer('Name','tanh_2')
+    dropoutLayer(0.2,'Name','drop_2')
+    maxPooling2dLayer(2,'Stride',2)
+    flattenLayer('Name','flatten3')
+    additionLayer(3,'Name','add')
+    sequenceUnfoldingLayer('Name','unfold')
+    lstmLayer(numHiddenUnits1,'OutputMode','sequence','Name','lstm1')
+    dropoutLayer(0.2,'Name','drop2')
+    lstmLayer(numHiddenUnits2,'OutputMode','sequence','Name','lstm2')
+    dropoutLayer(0.2,'Name','drop3')
+    lstmLayer(numHiddenUnits3,'OutputMode','last','Name','lstm3')
+    dropoutLayer(0.2,'Name','drop4')
+    fullyConnectedLayer(2,'Name','fc')
+    softmaxLayer('Name','softmax')
+    classificationLayer('Name','classOutput')];
+
+lgraph = layerGraph(layers1);
+lgraph = connectLayers(lgraph,'fold/miniBatchSize','unfold/miniBatchSize')
+layers2=[
+    convolution2dLayer(filterSize2,numFilters1,'Padding','same','Stride',2,'Name','skipConv1')
+    batchNormalizationLayer('Name','BN_4')
+    tanhLayer('Name','tanh_4')
+    dropoutLayer(0.2,'Name','drop_4')
+    maxPooling2dLayer(2,'Stride',2)
+    flattenLayer('Name','flatten5')
+    ]
+lgraph = addLayers(lgraph,layers2);
+lgraph = connectLayers(lgraph,'fold/out','skipConv1');
+lgraph = connectLayers(lgraph,'flatten5','add/in2');
+layers3=[
+    convolution2dLayer(filterSize3,numFilters1,'Padding','same','Stride',2,'Name','skipConv2')
+    batchNormalizationLayer('Name','BN_6')
+    tanhLayer('Name','tanh_6')
+    dropoutLayer(0.2,'Name','drop_6')
+%     reluLayer('Name','relu_6')
+%     convolution2dLayer(filterSize3,numFilters2,'Padding','same','Name','conv_5')
+%     batchNormalizationLayer('Name','BN_7')
+% %     reluLayer('Name','relu_7')
+%     tanhLayer('Name','tanh_7')
+%     dropoutLayer(0.2,'Name','drop_7')
+    maxPooling2dLayer(2,'Stride',2)
+    flattenLayer('Name','flatten7')]
+
+lgraph = addLayers(lgraph,layers3);
+
+lgraph = connectLayers(lgraph,'fold/out','skipConv2');
+lgraph = connectLayers(lgraph,'flatten7','add/in3');
+figure
+plot(lgraph)
+% print(lgraph.Layers)
+
+% Training network 
+ 
+options = trainingOptions('adam', ...
+    'GradientThreshold',0.1, ...
+    'MaxEpochs',maxEpochs, ...
+    'InitialLearnRate', 0.0001, ...  
+    'MiniBatchSize',miniBatchSize, ...
+    'Verbose',true,...
+    'Plots','training-progress',...
+    'SequenceLength','longest');
+YTrain = categorical(YTrain);
+YTest = categorical(YTest);
+
+ net = trainNetwork(XTrain,YTrain,lgraph,options);
+
+    YtrainPred = classify(net,XTrain,'SequenceLength','longest');
+    trainacc(i) = sum(YtrainPred == YTrain)/numel(YTrain)*100
+    [YtestPred,scores] = classify(net,XTest, 'SequenceLength','longest');
+    Scores=[Scores;scores];
+    testacc(i) = sum(YtestPred == YTest)/numel(YTest)*100
+    YTrain1 = [YTrain1; YTrain];
+    YtrainPred1 = [YtrainPred1; YtrainPred];
+    YTest1 = [YTest1; YTest];
+    YtestPred1 = [YtestPred1; YtestPred];  
+    trainacc
+    testacc
+
+    cm=plotconfusion(YTest',YtestPred','Test Accuracy')
+end
